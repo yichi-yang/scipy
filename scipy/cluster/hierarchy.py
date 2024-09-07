@@ -796,7 +796,7 @@ def ward(y):
     return linkage(y, method='ward', metric='euclidean')
 
 
-def linkage(y, method='single', metric='euclidean', optimal_ordering=False):
+def linkage(y, method='single', metric='euclidean', optimal_ordering=False, *, sizes=None):
     """
     Perform hierarchical/agglomerative clustering.
 
@@ -952,6 +952,8 @@ def linkage(y, method='single', metric='euclidean', optimal_ordering=False):
         also the `optimal_leaf_ordering` function.
 
         .. versionadded:: 1.0.0
+    size : ndarray, optional
+        The sizes of the starting clusters. Defaults to np.ones().
 
     Returns
     -------
@@ -1031,13 +1033,29 @@ def linkage(y, method='single', metric='euclidean', optimal_ordering=False):
                          "finite values.")
 
     n = int(distance.num_obs_y(y))
+
+    if sizes is not None:
+        if method != "ward":
+            msg = f"Only `method='ward'` supports specifying `sizes`"
+            raise ValueError(msg)
+
+        xp = array_namespace(sizes)
+        sizes = _asarray(sizes, dtype=xp.intc, copy=True, xp=xp)
+
+        # fix pairwise distances based on cluster sizes
+        for i in range(n):
+            for j in range(i + 1, n):
+                k = n * i + j - ((i + 2) * (i + 1)) // 2
+                y[k] *= np.sqrt(2 * sizes[i] * sizes[j] / (sizes[i] + sizes[j]))
+
     method_code = _LINKAGE_METHODS[method]
 
     y = np.asarray(y)
     if method == 'single':
         result = _hierarchy.mst_single_linkage(y, n)
     elif method in ['complete', 'average', 'weighted', 'ward']:
-        result = _hierarchy.nn_chain(y, n, method_code)
+        sizes = np.ones(n, np.intc) if sizes is None else sizes
+        result = _hierarchy.nn_chain(y, n, method_code, sizes)
     else:
         result = _hierarchy.fast_linkage(y, n, method_code)
     result = xp.asarray(result)

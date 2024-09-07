@@ -917,7 +917,7 @@ def fast_linkage(const double[:] dists, int n, int method):
     return Z.base
 
 
-def nn_chain(const double[:] dists, int n, int method):
+def nn_chain(const double[:] dists, int n, int method, int[:] size):
     """Perform hierarchy clustering using nearest-neighbor chain algorithm.
 
     Parameters
@@ -929,6 +929,8 @@ def nn_chain(const double[:] dists, int n, int method):
     method : int
         The linkage method. 0: single 1: complete 2: average 3: centroid
         4: median 5: ward 6: weighted
+    size : ndarray
+        The sizes of the starting clusters.
 
     Returns
     -------
@@ -939,7 +941,6 @@ def nn_chain(const double[:] dists, int n, int method):
     cdef double[:, :] Z = Z_arr
 
     cdef double[:] D = dists.copy()  # Distances between clusters.
-    cdef int[:] size = np.ones(n, dtype=np.intc)  # Sizes of clusters.
 
     cdef linkage_distance_update new_dist = linkage_methods[method]
 
@@ -1020,7 +1021,7 @@ def nn_chain(const double[:] dists, int n, int method):
     Z_arr = Z_arr[order]
 
     # Find correct cluster labels inplace.
-    label(Z_arr, n)
+    label(Z_arr, n, 0)  # setting update_size=0 to preserve Z[:, 3]
 
     return Z_arr
 
@@ -1114,10 +1115,10 @@ cdef class LinkageUnionFind:
         return x
 
 
-cdef label(double[:, :] Z, int n):
+cdef label(double[:, :] Z, int n, int update_size = 1):
     """Correctly label clusters in unsorted dendrogram."""
     cdef LinkageUnionFind uf = LinkageUnionFind(n)
-    cdef int i, x, y, x_root, y_root
+    cdef int i, x, y, x_root, y_root, size
 
     for i in range(n - 1):
         x, y = int(Z[i, 0]), int(Z[i, 1])
@@ -1126,7 +1127,9 @@ cdef label(double[:, :] Z, int n):
             Z[i, 0], Z[i, 1] = x_root, y_root
         else:
             Z[i, 0], Z[i, 1] = y_root, x_root
-        Z[i, 3] = uf.merge(x_root, y_root)
+        size = uf.merge(x_root, y_root)
+        if update_size:
+            Z[i, 3] = size
 
 
 def prelist(const double[:, :] Z, int[:] members, int n):
